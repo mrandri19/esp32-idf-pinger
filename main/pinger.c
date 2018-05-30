@@ -31,11 +31,19 @@
 #include "esp_ping.h"
 #include "ping.h"
 
+#define TAG "Pinger"
+
 #define DEFAULT_SSID "Wadsl-Mia"
 #define DEFAULT_PWD "KernelCacheCompressionIsBoringButFun"
-#define PING_COUNT 10
-#define URL "http://192.168.10.104:3000"
-#define TAG "Pinger"
+
+#define PING_COUNT 10 // How many pings in a group
+#define PING_TIMEOUT 750
+#define PING_DELAY 100 // Delay between each ping
+#define PING_DELAY_BETWEEN 5000 // Delay between each ping group
+
+#define URL "http://192.168.10.104:3000" // The url of the server for the ping data
+
+#define PING_IP "1.1.1.1"
 
 /* The event group allows multiple bits for each event,
    but we only care about one event - are we connected
@@ -93,11 +101,8 @@ event_handler(EventGroupHandle_t wifi_event_group, system_event_t* event)
         break;
     case SYSTEM_EVENT_STA_DISCONNECTED:
         ESP_LOGI(TAG, "Lost wifi connection");
-        /* This is a workaround as ESP32 WiFi libs don't currently
-         auto-reassociate. */
-        // esp_wifi_connect();
+        esp_wifi_connect();
 
-        ESP_LOGI(TAG, "Not reconnecting, deiniting ping");
         ping_deinit();
 
         // Unset the CONNECTED_BIT on the wifi_event_group
@@ -239,11 +244,10 @@ void ping_task(QueueHandle_t queue)
     while (1) {
         ip4_addr_t ip;
 
-        // TODO: add config
-        ip4addr_aton("1.1.1.1", &ip);
-        uint32_t ping_count = PING_COUNT; // how many pings per report
-        uint32_t ping_timeout = 750; // mS till we consider it timed out
-        uint32_t ping_delay = 100; // mS between pings
+        ip4addr_aton(PING_IP, &ip);
+        uint32_t ping_count = PING_COUNT;
+        uint32_t ping_timeout = PING_TIMEOUT;
+        uint32_t ping_delay = PING_DELAY;
 
         ESP_ERROR_CHECK(esp_ping_set_target(
             PING_TARGET_IP_ADDRESS_COUNT, &ping_count, sizeof(uint32_t)));
@@ -259,9 +263,7 @@ void ping_task(QueueHandle_t queue)
 
         ping_init();
 
-        // This should be enough for all the pings
-        // TODO: add config
-        vTaskDelay(5000 / portTICK_PERIOD_MS);
+        vTaskDelay(PING_DELAY_BETWEEN / portTICK_PERIOD_MS);
     }
 }
 void http_client_task(QueueHandle_t queue)
@@ -277,9 +279,9 @@ void http_client_task(QueueHandle_t queue)
         ESP_LOGI(TAG, "received some data, i = %d", i);
         i++;
 
-        if (i == PING_COUNT) {
+        if (i == PING_COUNT + 1) {
             char post_data_buffer[4096];
-            ping_data_to_json(ping_data_buffer, i, post_data_buffer);
+            ping_data_to_json(ping_data_buffer, PING_COUNT, post_data_buffer);
             ESP_LOGI(TAG, "%s", post_data_buffer);
             ESP_ERROR_CHECK(send_data(post_data_buffer));
             i = 0;
