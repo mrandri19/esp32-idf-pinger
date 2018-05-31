@@ -208,10 +208,11 @@ static esp_err_t IRAM_ATTR
 ping_results_callback(ping_target_id_t msgType, esp_ping_found* pf)
 {
     // Get the time
-    time_t now;
     struct tm timeinfo;
-    time(&now);
-    localtime_r(&now, &timeinfo);
+
+    struct timeval tval;
+    gettimeofday(&tval, NULL);
+    time_t now = tval.tv_sec;
 
     // Set timezone to Italy
     setenv("TZ", "CET-1CEST-2,M3.5.0/02:00:00,M10.5.0/03:00:00", 1);
@@ -219,8 +220,11 @@ ping_results_callback(ping_target_id_t msgType, esp_ping_found* pf)
     localtime_r(&now, &timeinfo);
 
     // Print the time
-    char strftime_buf[64];
-    strftime(strftime_buf, sizeof(strftime_buf), "%Y-%m-%dT%H:%M:%SZ", &timeinfo);
+    char strftime_buf_no_ms[64];
+    strftime(strftime_buf_no_ms, sizeof(strftime_buf_no_ms), "%Y-%m-%dT%H:%M:%S", &timeinfo);
+    char strftime_buf[128];
+    sprintf(strftime_buf, "%s.%06luZ", strftime_buf_no_ms, (unsigned long)tval.tv_usec);
+
     ESP_LOGI(TAG, "[%s]\tpf->send_count: %d", strftime_buf, pf->send_count);
 
     ping_data_t ping_data = { 0 };
